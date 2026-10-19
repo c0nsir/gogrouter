@@ -4410,17 +4410,20 @@ function Match:Tick(s)
     if not inMatch(m) then self.status = "Waiting for match"; return end
     if m.state == "Prep" then
         self:_speed(s, key, "prep")
-        if s.AutoStart and self:_due("start", key, 6, 5) then a:VoteStart() end
-        self.status = s.AutoStart and "Voted start" or "Prep"
+        -- A match that follows our own wave restart starts right away, even with Auto start off.
+        local restarted = self.restartedFrom ~= nil and self.restartedFrom ~= key
+        if (s.AutoStart or restarted) and self:_due("start", key, 6, 5) then a:VoteStart() end
+        self.status = (s.AutoStart or restarted) and "Voted start" or "Prep"
         return
     end
     local wave = a.wave or 0
     self:_speed(s, key, "wave")                          -- again once waves begin, in case the game reset it
     if s.RestartWave > 0 and wave >= s.RestartWave then
-        if self:_due("restart", key, 10, 3) then self:_claimFirst(s, key); a:Restart() end
+        if self:_due("restart", key, 10, 3) then self:_claimFirst(s, key); self.restartedFrom = key; a:Restart() end
         self.status = "Restarting at wave " .. wave
         return
     end
+    if self.restartedFrom ~= key then self.restartedFrom = nil end   -- the restarted match is under way
     if s.AutoSkip and wave >= s.SkipFromWave and self:_due("skip" .. wave, key, 5, 2) then a:VoteSkip() end
     self.status = "Wave " .. wave
 end
@@ -6350,7 +6353,7 @@ toggle(auto, "Auto skip waves", "AutoSkip", "Votes skip once per wave")
 input(auto, "Skip from wave", "SkipFromWave")
 dropdown(auto, "When the match ends", "EndAction", Settings.END_ACTIONS)
 input(auto, "End delay (seconds)", "EndDelay")
-input(auto, "Restart at wave (0 = off)", "RestartWave")
+input(auto, "Restart at wave (0 = off)", "RestartWave")   -- restarts the stage at that wave and starts the next run
 dropdown(auto, "Game speed", "GameSpeed", Settings.GAME_SPEEDS)
 toggle(auto, "Claim quests before restart", "ClaimBeforeRestart", "Claims all finished quests right before a replay or restart")
 toggle(auto, "Auto skip reward popups", "AutoSkipPopups", "Clicks through \"Click anywhere to continue\" reveals after a match")
