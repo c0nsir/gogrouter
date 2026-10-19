@@ -25,7 +25,7 @@ local __gogKeyOk = (function()
     end
     local function round(object, r) make("UICorner", { CornerRadius = UDim.new(0, r), Parent = object }) end
     local BG, PANEL, TEXT, MUTED = Color3.fromRGB(14, 17, 24), Color3.fromRGB(21, 25, 34), Color3.fromRGB(233, 239, 245), Color3.fromRGB(128, 138, 152)
-    local ACCENT, DANGER = Color3.fromRGB(122, 0, 255), Color3.fromRGB(240, 90, 90)
+    local ACCENT, DANGER = Color3.fromRGB(157, 199, 245)   -- Glacier, the default accent, Color3.fromRGB(240, 90, 90)
 
     local gui = make("ScreenGui", { Name = "GogHubKey", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 999, Parent = parent })
     local frame = make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(340, 178),
@@ -50,7 +50,7 @@ local __gogKeyOk = (function()
     local message = make("TextLabel", { BackgroundTransparency = 1, Position = UDim2.fromOffset(22, 112), Size = UDim2.new(1, -44, 0, 16),
         Font = Enum.Font.Gotham, Text = "", TextColor3 = DANGER, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, Parent = frame })
     local unlock = make("TextButton", { Position = UDim2.fromOffset(22, 132), Size = UDim2.new(1, -44, 0, 32), BackgroundColor3 = ACCENT,
-        BorderSizePixel = 0, Font = Enum.Font.GothamBold, Text = "Unlock", TextColor3 = Color3.new(1, 1, 1), TextSize = 13,
+        BorderSizePixel = 0, Font = Enum.Font.GothamBold, Text = "Unlock", TextColor3 = Color3.fromRGB(14, 17, 24), TextSize = 13,
         AutoButtonColor = true, Parent = frame })
     round(unlock, 8)
     TweenService:Create(scale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play()
@@ -6596,7 +6596,8 @@ end) })
 hook:AddButton({ Text = "Clear webhook URL", Secondary = true, Callback = safe(function() commit("WebhookURL", "") end) })
 
 -- 10. Config tab.
-local configs = window:AddTab({ Title = "Config", Icon = "td-config" }):AddSection({ Title = "Configs",
+local configTab = window:AddTab({ Title = "Config", Icon = "td-config" })
+local configs = configTab:AddSection({ Title = "Configs",
     Description = store and ("Saved in workspace/" .. Profile.Namespace .. "/Configs") or ("File functions unavailable: " .. table.concat(missing, ", ")) })
 local configField, autosave, configName
 local function refreshConfigs()
@@ -6660,16 +6661,19 @@ local function applyAccent(color, persist)
     window:SetAccent(color)
     if persist and theme then theme:Set({ color.R, color.G, color.B }) end
 end
-appearance:AddDropdown({ Text = "Palette", Values = { "Jade", "Glacier", "Iris", "Coral" }, Callback = function(value)
+appearance:AddDropdown({ Text = "Palette", Values = { "Jade", "Glacier", "Iris", "Coral" }, Default = "Glacier", Callback = function(value)
     if COLORS[value] then applyAccent(COLORS[value], true); picker:Set(COLORS[value], true) end
 end })
 picker = appearance:AddColorPicker({ Text = "Custom accent", Default = window.Theme.Accent, Callback = function(value) applyAccent(value, true) end })
+-- Default accent is Glacier; a colour the user saved (palette or custom) wins.
+local savedAccent = false
 if theme then
     safe(function()
         local c = theme:Load()
-        if c then local color = Color3.new(c[1], c[2], c[3]); applyAccent(color, false); picker:Set(color, true) end
+        if c then local color = Color3.new(c[1], c[2], c[3]); applyAccent(color, false); picker:Set(color, true); savedAccent = true end
     end)()
 end
+if not savedAccent then applyAccent(COLORS.Glacier, false); picker:Set(COLORS.Glacier, true) end
 local interface = settingsTab:AddSection({ Title = "Interface" })
 local keybind = interface:AddKeybind({ Text = "Toggle window", Default = keyCode(settings.ToggleKey),
     Changed = safe(function(key) commit("ToggleKey", key.Name); window:SetToggleKey(key) end) })
@@ -6678,6 +6682,7 @@ local helpers = settingsTab:AddSection({ Title = "Helpers" })
 toggle(helpers, "Anti-AFK", "AntiAFK", "Prevents the Roblox idle kick")
 local session = settingsTab:AddSection({ Title = "Session" })
 session:AddParagraph("Executor", type(identifyexecutor) == "function" and table.concat({ identifyexecutor() }, " ") or "unknown")
+session:AddButton({ Text = "Show walkthrough again", Secondary = true, Callback = function() if app.startTour then safe(app.startTour)() end end })
 session:AddButton({ Text = "Unload script", Secondary = true, Callback = function() app:Destroy() end })
 
 -- 12. Lifecycle: unload disposes controllers in order and flushes state.
@@ -6707,6 +6712,154 @@ end
 refresh(); refreshConfigs()
 if store then safe(function() local file = store:GetAutoload(); if file then loadConfig(file) end end)() end
 macroTab:Select(); window:SetStatus("Ready", "Idle")
+
+-- 13b. First-run walkthrough: a dimmed overlay, a highlight ring on each feature and a card with Next / Skip.
+-- Shown once (remembered in <Namespace>/walkthrough.json); Settings > Session has "Show walkthrough again".
+local TOUR_STEPS = {
+    { Title = "Welcome to GogHub", Body = "A quick tour of the main features. It takes about 20 seconds; you can skip it any time." },
+    { Tab = macroTab, Target = function() return macroTab.Button end, Title = "Macro",
+        Body = "Record a match, then turn on Play to repeat it. Assign recordings to gamemodes, maps or acts below." },
+    { Tab = autoTab, Target = function() return autoTab.Button end, Title = "AutoPlay",
+        Body = "No recording? Autoplay places and upgrades your units, and runs abilities and buff rotations." },
+    { Tab = gameTab, Target = function() return gameTab.Button end, Title = "Game",
+        Body = "Auto start, auto skip, replay or leave at the end, game speed and Delete map live here." },
+    { Target = function() return window.Root:FindFirstChild("FeatureSearch", true) end, Title = "Search",
+        Body = "Type any feature name here and toggle it straight from the results. Enter flips the top match." },
+    { Target = function() return window.Root:FindFirstChild("Hide", true) end, Title = "Minimize",
+        Body = "The yellow dot (or the logo) shrinks the window to a small button. RightShift hides it completely." },
+    { Tab = configTab, Target = function() return configTab.Button end, Title = "Configs",
+        Body = "Save your setup as a config and set it to autoload, so everything is ready next time." },
+    { Tab = settingsTab, Target = function() return settingsTab.Button end, Title = "Settings",
+        Body = "The gear opens Settings: accent colour, the window toggle key, Anti-AFK, and this walkthrough again. Have fun!" },
+}
+local tourOverlay
+local function closeTour(remember)
+    if tourOverlay then tourOverlay:Destroy(); tourOverlay = nil end
+    if remember and store then pcall(function() store:LocalFile("walkthrough", { Seen = true, Version = 1 }) end) end
+end
+local function startTour()
+    closeTour(false)
+    local theme = window.Theme
+    local root = window.Root
+    local overlay = Instance.new("Frame")
+    overlay.Name = "GogHubWalkthrough"
+    overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+    overlay.BackgroundTransparency = 0.45
+    overlay.BorderSizePixel = 0
+    overlay.Size = UDim2.fromScale(1, 1)
+    overlay.ZIndex = 150
+    overlay.Active = true                       -- blocks clicks to the window underneath
+    overlay.Parent = root
+    tourOverlay = overlay
+    local ring = Instance.new("Frame")
+    ring.BackgroundTransparency = 1
+    ring.ZIndex = 151
+    ring.Visible = false
+    ring.Parent = overlay
+    Instance.new("UICorner", ring).CornerRadius = UDim.new(0, 10)
+    local ringStroke = Instance.new("UIStroke", ring)
+    ringStroke.Thickness = 2
+    local card = Instance.new("Frame")
+    card.BackgroundColor3 = theme.Card
+    card.BorderSizePixel = 0
+    card.Size = UDim2.fromOffset(320, 150)
+    card.ZIndex = 152
+    card.Parent = overlay
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 12)
+    local cardStroke = Instance.new("UIStroke", card)
+    cardStroke.Color = theme.Border
+    local function label(text, size, color, font, y, height)
+        local l = Instance.new("TextLabel")
+        l.BackgroundTransparency = 1
+        l.Position = UDim2.fromOffset(18, y)
+        l.Size = UDim2.new(1, -36, 0, height)
+        l.Font = font
+        l.Text = text
+        l.TextColor3 = color
+        l.TextSize = size
+        l.TextWrapped = true
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.TextYAlignment = Enum.TextYAlignment.Top
+        l.ZIndex = 153
+        l.Parent = card
+        return l
+    end
+    local counter = label("", 10, theme.Muted, Enum.Font.GothamMedium, 14, 14)
+    local title = label("", 16, theme.Text, Enum.Font.GothamBold, 30, 22)
+    local body = label("", 12, theme.Muted, Enum.Font.Gotham, 56, 48)
+    local function button(text, primary, x)
+        local b = Instance.new("TextButton")
+        b.AutoButtonColor = true
+        b.BackgroundColor3 = primary and theme.Accent or theme.Surface
+        b.BorderSizePixel = 0
+        b.Position = UDim2.new(1, x, 1, -42)
+        b.Size = UDim2.fromOffset(84, 28)
+        b.Font = Enum.Font.GothamBold
+        b.Text = text
+        b.TextColor3 = primary and theme.Background or theme.Text
+        b.TextSize = 12
+        b.ZIndex = 153
+        b.Parent = card
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+        return b
+    end
+    local skip = button("Skip", false, -196)
+    local nextButton = button("Next", true, -102)
+    local index = 1
+    -- Position in the window's own (unscaled) coordinates.
+    local function localRect(target)
+        local scale = root.AbsoluteSize.X / math.max(root.Size.X.Offset, 1)
+        local position = (target.AbsolutePosition - root.AbsolutePosition) / scale
+        local size = target.AbsoluteSize / scale
+        return position, size
+    end
+    local function show()
+        local step = TOUR_STEPS[index]
+        if step.Tab then pcall(function() step.Tab:Select() end) end
+        counter.Text = index .. " / " .. #TOUR_STEPS
+        title.Text = step.Title
+        body.Text = step.Body
+        nextButton.Text = index == #TOUR_STEPS and "Done" or "Next"
+        ringStroke.Color = window.Theme.Accent
+        nextButton.BackgroundColor3 = window.Theme.Accent
+        local target = step.Target and step.Target() or nil
+        local width, height = root.Size.X.Offset, root.Size.Y.Offset
+        if target and target.Visible ~= false then
+            local position, size = localRect(target)
+            ring.Position = UDim2.fromOffset(position.X - 6, position.Y - 6)
+            ring.Size = UDim2.fromOffset(size.X + 12, size.Y + 12)
+            ring.Visible = true
+            -- Card beside the target: to the right of sidebar items, below title-bar items; kept inside the window.
+            local x = position.X + size.X + 18
+            local y = position.Y - 10
+            if x + 320 > width - 12 then x = math.max(12, position.X + size.X / 2 - 160); y = position.Y + size.Y + 16 end
+            x = math.clamp(x, 12, width - 332)
+            y = math.clamp(y, 12, height - 162)
+            card.Position = UDim2.fromOffset(x, y)
+        else
+            ring.Visible = false
+            card.Position = UDim2.fromOffset(width / 2 - 160, height / 2 - 75)
+        end
+    end
+    nextButton.MouseButton1Click:Connect(function()
+        if index >= #TOUR_STEPS then closeTour(true); pcall(function() macroTab:Select() end); return end
+        index = index + 1
+        show()
+    end)
+    skip.MouseButton1Click:Connect(function() closeTour(true); pcall(function() macroTab:Select() end) end)
+    task.defer(show)                            -- after layout, so positions are known
+end
+local function tourSeen()
+    if not store then return app.tourShown == true end
+    local ok, data = pcall(store.LocalFile, store, "walkthrough")
+    return ok and type(data) == "table" and data.Seen == true
+end
+app.startTour = startTour
+if not tourSeen() then
+    app.tourShown = true
+    task.delay(0.8, function() if app.alive and window.Gui.Parent then safe(startTour)() end end)
+end
+
 
 -- 14. Heartbeat supervisor: every controller Step is non-blocking and individually guarded.
 workers:Give(RunService.Heartbeat:Connect(function()
